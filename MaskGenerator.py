@@ -1,4 +1,5 @@
 import os
+import sys
 from random import randint, seed
 import itertools
 import numpy as np
@@ -31,7 +32,7 @@ class MaskGenerator():
         if self.filepath:
             filenames = [f for f in os.listdir(self.filepath)]
             self.mask_files = [f for f in filenames if any(filetype in f.lower() for filetype in ['.jpeg', '.png', '.jpg'])]
-            print(">> Found {} masks in {}".format(len(self.mask_files), self.filepath))        
+            print(">> Found {} masks in {}".format(len(self.mask_files), self.filepath), file=sys.stderr)        
 
         # Seed for reproducibility
         if rand_seed:
