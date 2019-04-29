@@ -26,9 +26,9 @@ from MaskGenerator import MaskGenerator
 
 #SETTINGS
 
-TRAIN_DIR = r"TrainingImages/512px/0001"
-VAL_DIR = r"TrainingImages/512px/0002"
-TEST_DIR = r"TrainingImages/512px/0003"
+TRAIN_DIR = "TrainingImages/512px/0001"
+VAL_DIR = "TrainingImages/512px/0002"
+TEST_DIR = "TrainingImages/512px/0003"
 BATCH_SIZE = 256
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
