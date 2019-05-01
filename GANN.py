@@ -9,9 +9,9 @@ Usage: python3 dcgan_mnist.py
 import numpy as np
 import time
 import gc
+import sys
 from keras.preprocessing.image import ImageDataGenerator
 from copy import deepcopy
-from tensorflow.examples.tutorials.mnist import input_data
 
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten, Reshape
@@ -26,9 +26,9 @@ from MaskGenerator import MaskGenerator
 
 #SETTINGS
 
-TRAIN_DIR = "TrainingImages/512px/0001"
-VAL_DIR = "TrainingImages/512px/0002"
-TEST_DIR = "TrainingImages/512px/0003"
+TRAIN_DIR = "TrainingImages/512px/train"
+VAL_DIR = "TrainingImages/512px/val"
+TEST_DIR = "TrainingImages/512px/test"
 BATCH_SIZE = 256
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
@@ -159,7 +159,8 @@ class MNIST_DCGAN(object):
             TRAIN_DIR, 
             MaskGenerator(512, 512, 1),
             target_size=(512, 512), 
-            batch_size=BATCH_SIZE
+            batch_size=BATCH_SIZE,
+            color_mode="grayscale"
         )
 
         # Create validation generator
@@ -170,7 +171,8 @@ class MNIST_DCGAN(object):
             target_size=(512, 512), 
             batch_size=BATCH_SIZE, 
             classes=['val'], 
-            seed=42
+            seed=42,
+            color_mode="grayscale"
         )
 
         # Create testing generator
@@ -180,7 +182,8 @@ class MNIST_DCGAN(object):
             MaskGenerator(512, 512, 1), 
             target_size=(512, 512), 
             batch_size=BATCH_SIZE, 
-            seed=42
+            seed=42,
+            color_mode="grayscale"
         )
         #yep
         
@@ -192,15 +195,14 @@ class MNIST_DCGAN(object):
         # # Show side by side
         for i in range(len(ori)):
             _, axes = plt.subplots(1, 3, figsize=(20, 5))
-            axes[0].imshow(masked[i,:,:,:])
-            axes[1].imshow(mask[i,:,:,:] * 1.)
-            axes[2].imshow(ori[i,:,:,:])
+            axes[0].imshow(masked[i,:,:,0])
+            axes[1].imshow(mask[i,:,:,0] * 1.)
+            axes[2].imshow(ori[i,:,:,0])
             plt.show()
        # #Not the correct trainign dataset
         # self.x_train = input_data.read_data_sets("mnist",\
         	# one_hot=True).train.images
-        # self.x_train = self.x_train.reshape(-1, self.img_rows,\
-        	# self.img_cols, 1).astype(np.float32)
+
 
         #self.DCGAN = DCGAN()
         #self.discriminator =  self.DCGAN.discriminator_model()

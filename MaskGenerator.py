@@ -8,7 +8,7 @@ import cv2
 
 class MaskGenerator():
 
-    def __init__(self, height, width, channels=3, rand_seed=None, filepath=None):
+    def __init__(self, height, width, channels=1, rand_seed=None, filepath=None):
         """Convenience functions for generating masks to be used for inpainting training
         
         Arguments:
@@ -16,7 +16,7 @@ class MaskGenerator():
             width {width} -- Mask width
         
         Keyword Arguments:
-            channels {int} -- Channels to output (default: {3})
+            channels {int} -- Channels to output (default: {1})
             rand_seed {[type]} -- Random seed (default: {None})
             filepath {[type]} -- Load masks from filepath. If None, generate masks with OpenCV (default: {None})
         """
