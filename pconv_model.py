@@ -13,13 +13,12 @@ from keras.applications import VGG16
 from keras import backend as K
 from keras.utils.multi_gpu_utils import multi_gpu_model
 
-from libs.pconv_layer import PConv2D
-
+from pconv_layer import PConv2D
 # source: https://github.com/MathiasGruber/PConv-Keras
 
 class PConvUnet(object):
         
-        def __init__(self, img_rows=512, img_cols=512, weight_filepath=None):
+    def __init__(self, img_rows=512, img_cols=512, weight_filepath=None):
         """Create the PConvUnet. If variable image size, set img_rows and img_cols to None
         
         Args:

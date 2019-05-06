@@ -118,7 +118,7 @@ class DCGAN(object):
         if self.G:
             return self.G
         
-        return PConvUnet()
+        return PConvUnet().model
 
     def discriminator_model(self):
         if self.DM:
