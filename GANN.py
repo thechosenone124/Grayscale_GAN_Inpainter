@@ -19,7 +19,7 @@ from keras.layers import Conv2D, Conv2DTranspose, UpSampling2D
 from keras.layers import LeakyReLU, Dropout
 from keras.layers import BatchNormalization
 from keras.optimizers import Adam, RMSprop
-
+from pconv_model import PConvUnet
 import matplotlib.pyplot as plt
 
 from MaskGenerator import MaskGenerator
@@ -246,9 +246,9 @@ class MNIST_DCGAN(object):
             log_mesg = "%d: [D loss: %f, acc: %f]" % (i, d_loss[0], d_loss[1])
             log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, a_loss[0], a_loss[1])
             print(log_mesg)
-            if save_interval > 0:
+            #if save_interval > 0:
                 #not yet ready
-                if (i+1) % save_interval == 0:
+                #if (i+1) % save_interval == 0:
                     #self.plot_images(save2file=True, samples=noise_input.shape[0],\
                     #    noise=noise_input, step=(i+1))
 

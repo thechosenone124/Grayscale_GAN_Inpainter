@@ -25,8 +25,7 @@ class PConvUnet(object):
         Args:
             img_rows (int): image height.
             img_cols (int): image width.
-            weight_filepath: filepath containing weights
-        """
+            weight_filepath: filepath containing weights"""
         
         # Settings
         self.weight_filepath = weight_filepath
