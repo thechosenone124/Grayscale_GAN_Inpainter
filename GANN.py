@@ -90,7 +90,7 @@ class DCGAN(object):
         # In: 28 x 28 x 1, depth = 1
         # Out: 14 x 14 x 1, depth=64
         input_shape = (self.img_rows, self.img_cols, self.channel)
-        self.D.add(Conv2D(depth*1, 5, strides=2, input_shape=input_shape,\
+        self.D.add(Conv2D(depth*1, 5, strides=2, input_shape=input_shape,
             padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
         self.D.add(Dropout(dropout))
@@ -155,7 +155,7 @@ class MNIST_DCGAN(object):
             rescale=1./255,
             horizontal_flip=True
         )
-        train_generator = train_datagen.flow_from_directory(
+        self.train_generator = train_datagen.flow_from_directory(
             TRAIN_DIR, 
             MaskGenerator(512, 512, 1),
             target_size=(512, 512), 
@@ -165,7 +165,7 @@ class MNIST_DCGAN(object):
 
         # Create validation generator
         val_datagen = AugmentingDataGenerator(rescale=1./255)
-        val_generator = val_datagen.flow_from_directory(
+        self.val_generator = val_datagen.flow_from_directory(
             VAL_DIR, 
             MaskGenerator(512, 512, 1), 
             target_size=(512, 512), 
@@ -177,7 +177,7 @@ class MNIST_DCGAN(object):
 
         # Create testing generator
         test_datagen = AugmentingDataGenerator(rescale=1./255)
-        test_generator = test_datagen.flow_from_directory(
+        self.test_generator = test_datagen.flow_from_directory(
             TEST_DIR, 
             MaskGenerator(512, 512, 1), 
             target_size=(512, 512), 
@@ -189,7 +189,7 @@ class MNIST_DCGAN(object):
         
         #Display some sample images
         # Pick out an example
-        test_data = next(test_generator)
+        test_data = next(self.test_generator)
         (masked, mask), ori = test_data
 
         # # Show side by side
@@ -199,15 +199,11 @@ class MNIST_DCGAN(object):
             axes[1].imshow(mask[i,:,:,0] * 1.)
             axes[2].imshow(ori[i,:,:,0])
             plt.show()
-       # #Not the correct trainign dataset
-        # self.x_train = input_data.read_data_sets("mnist",\
-        	# one_hot=True).train.images
 
-
-        #self.DCGAN = DCGAN()
-        #self.discriminator =  self.DCGAN.discriminator_model()
-        #self.adversarial = self.DCGAN.adversarial_model()
-        #self.generator = self.DCGAN.generator()
+        self.DCGAN = DCGAN()
+        self.discriminator =  self.DCGAN.discriminator_model()
+        self.adversarial = self.DCGAN.adversarial_model()
+        self.generator = self.DCGAN.generator()
         
     def plot_callback(model):
         """Called at the end of each epoch, displaying our previous test images,
@@ -230,30 +226,31 @@ class MNIST_DCGAN(object):
             plt.savefig(r'data/test_samples/img_{}_{}.png'.format(i, pred_time))
             plt.close()
     
-    def train(self, train_steps=2000, batch_size=256, save_interval=0):
+    def train(self, train_steps=2000, batch_size=BATCH_SIZE, save_interval=0):
         noise_input = None
         if save_interval>0:
             noise_input = np.random.uniform(-1.0, 1.0, size=[16, 100])
-        for i in range(train_steps):
-            images_train = self.x_train[np.random.randint(0,
-                self.x_train.shape[0], size=batch_size), :, :, :]
-            noise = np.random.uniform(-1.0, 1.0, size=[batch_size, 100])
-            images_fake = self.generator.predict(noise)
+        # Iterate through each batch of training generator
+        for inputs, targets in self.train_generator:
+            images_train = inputs
+            images_fake = self.generator.predict(images_train) #Feed the generator the same training as discriminator
+            images_true = targets
+            
             x = np.concatenate((images_train, images_fake))
             y = np.ones([2*batch_size, 1])
             y[batch_size:, :] = 0
             d_loss = self.discriminator.train_on_batch(x, y)
 
             y = np.ones([batch_size, 1])
-            noise = np.random.uniform(-1.0, 1.0, size=[batch_size, 100])
-            a_loss = self.adversarial.train_on_batch(noise, y)
+            a_loss = self.adversarial.train_on_batch(images_train, y)
             log_mesg = "%d: [D loss: %f, acc: %f]" % (i, d_loss[0], d_loss[1])
             log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, a_loss[0], a_loss[1])
             print(log_mesg)
-            if save_interval>0:
-                if (i+1)%save_interval==0:
-                    self.plot_images(save2file=True, samples=noise_input.shape[0],\
-                        noise=noise_input, step=(i+1))
+            if save_interval > 0:
+                #not yet ready
+                if (i+1) % save_interval == 0:
+                    #self.plot_images(save2file=True, samples=noise_input.shape[0],\
+                    #    noise=noise_input, step=(i+1))
 
     def plot_images(self, save2file=False, fake=True, samples=16, noise=None, step=0):
         filename = 'mnist.png'
@@ -283,8 +280,8 @@ class MNIST_DCGAN(object):
 
 if __name__ == '__main__':
     mnist_dcgan = MNIST_DCGAN()
-    #timer = ElapsedTimer()
-    #mnist_dcgan.train(train_steps=10000, batch_size=256, save_interval=500)
-    #timer.elapsed_time()
+    timer = ElapsedTimer()
+    mnist_dcgan.train(train_steps=10000, batch_size=256, save_interval=500)
+    timer.elapsed_time()
     #mnist_dcgan.plot_images(fake=True)
     #mnist_dcgan.plot_images(fake=False, save2file=True)
