@@ -75,10 +75,12 @@ class DCGAN(object):
         self.img_cols = img_cols
         self.channel = channel
         self.D = None   # discriminator
-        self.gen_input = None   # generator
-        self.gen_output = None  # generator
+        self.G = None   # generator
+        self.gen_input = None
+        self.gen_output = None
         self.AM = None  # adversarial model
         self.DM = None  # discriminator model
+        self.generator_network = PConvUnet()
 
     def discriminator(self):
         if self.D:
@@ -114,9 +116,12 @@ class DCGAN(object):
         return self.D
     #Partial convolutional generator
     def build_generator(self):
-        if self.gen_input or self.gen_output:
-            return self.gen_input, self.gen_output
-        self.gen_input, self.gen_output = PConvUnet().model
+        if self.G:
+            return
+            
+        self.gen_input = self.generator_network.input
+        self.gen_output = self.generator_network.output
+        self.G = self.generator_network.model
 
     def discriminator_model(self):
         if self.DM:
