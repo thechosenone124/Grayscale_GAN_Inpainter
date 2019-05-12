@@ -1,9 +1,7 @@
 '''
-DCGAN on MNIST using Keras
-Author: Rowel Atienza
-Project: https://github.com/roatienza/Deep-Learning-Experiments
+Author: Bryan Tan
 Dependencies: tensorflow 1.0 and keras 2.0
-Usage: python3 dcgan_mnist.py
+Usage: python3 TBD.py
 '''
 
 import numpy as np
@@ -12,7 +10,7 @@ import gc
 import sys
 from keras.preprocessing.image import ImageDataGenerator
 from copy import deepcopy
-
+from keras.models import Model
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten, Reshape
 from keras.layers import Conv2D, Conv2DTranspose, UpSampling2D
@@ -77,7 +75,8 @@ class DCGAN(object):
         self.img_cols = img_cols
         self.channel = channel
         self.D = None   # discriminator
-        self.G = None   # generator
+        self.gen_input = None   # generator
+        self.gen_output = None  # generator
         self.AM = None  # adversarial model
         self.DM = None  # discriminator model
 
@@ -114,11 +113,10 @@ class DCGAN(object):
         self.D.summary()
         return self.D
     #Partial convolutional generator
-    def generator(self):
+    def build_generator(self):
         if self.gen_input or self.gen_output:
             return self.gen_input, self.gen_output
-        
-        return PConvUnet().model
+        self.gen_input, self.gen_output = PConvUnet().model
 
     def discriminator_model(self):
         if self.DM:
@@ -134,6 +132,7 @@ class DCGAN(object):
         if self.AM:
             return self.AM
         optimizer = RMSprop(lr=0.0001, decay=3e-8)
+        self.build_generator()
         self.AM = Model(self.gen_input, self.DM(self.gen_output))
         
         self.AM.compile(loss='binary_crossentropy', optimizer=optimizer,\
@@ -202,7 +201,6 @@ class MNIST_DCGAN(object):
         self.DCGAN = DCGAN()
         self.discriminator =  self.DCGAN.discriminator_model()
         self.adversarial = self.DCGAN.adversarial_model()
-        self.generator = self.DCGAN.generator()
         
     def plot_callback(model):
         """Called at the end of each epoch, displaying our previous test images,

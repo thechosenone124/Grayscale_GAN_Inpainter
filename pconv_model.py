@@ -90,7 +90,7 @@ class PConvUnet(object):
         # Setup the model inputs / outputs
         model = Model(inputs=[inputs_img, inputs_mask], outputs=outputs)
 
-        return inputs, outputs   
+        return [inputs_img, inputs_mask], outputs   
 
     #Do not run this. The generator has no loss function and should not be compiled    
     def compile_pconv_unet(self, model, inputs_mask, lr=0.0002):
