@@ -115,8 +115,8 @@ class DCGAN(object):
         return self.D
     #Partial convolutional generator
     def generator(self):
-        if self.G:
-            return self.G
+        if self.gen_input or self.gen_output:
+            return self.gen_input, self.gen_output
         
         return PConvUnet().model
 
@@ -134,9 +134,8 @@ class DCGAN(object):
         if self.AM:
             return self.AM
         optimizer = RMSprop(lr=0.0001, decay=3e-8)
-        self.AM = Sequential()
-        self.AM.add(self.generator())
-        self.AM.add(self.discriminator())
+        self.AM = Model(self.gen_input, self.DM(self.gen_output))
+        
         self.AM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
         return self.AM
@@ -189,6 +188,26 @@ class MNIST_DCGAN(object):
         
         #Display some sample images
         # Pick out an example
+        # test_data = next(self.test_generator)
+        # (masked, mask), ori = test_data
+
+        # # Show side by side
+        # for i in range(len(ori)):
+            # _, axes = plt.subplots(1, 3, figsize=(20, 5))
+            # axes[0].imshow(masked[i,:,:,0])
+            # axes[1].imshow(mask[i,:,:,0] * 1.)
+            # axes[2].imshow(ori[i,:,:,0])
+            # plt.show()
+
+        self.DCGAN = DCGAN()
+        self.discriminator =  self.DCGAN.discriminator_model()
+        self.adversarial = self.DCGAN.adversarial_model()
+        self.generator = self.DCGAN.generator()
+        
+    def plot_callback(model):
+        """Called at the end of each epoch, displaying our previous test images,
+        as well as their masked predictions and saving them to disk"""
+        
         test_data = next(self.test_generator)
         (masked, mask), ori = test_data
 
@@ -200,15 +219,6 @@ class MNIST_DCGAN(object):
             axes[2].imshow(ori[i,:,:,0])
             plt.show()
 
-        self.DCGAN = DCGAN()
-        self.discriminator =  self.DCGAN.discriminator_model()
-        self.adversarial = self.DCGAN.adversarial_model()
-        self.generator = self.DCGAN.generator()
-        
-    def plot_callback(model):
-        """Called at the end of each epoch, displaying our previous test images,
-        as well as their masked predictions and saving them to disk"""
-        
         # Get samples & Display them        
         pred_img = model.predict([masked, mask])
         pred_time = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
@@ -216,9 +226,9 @@ class MNIST_DCGAN(object):
         # Clear current output and display test images
         for i in range(len(ori)):
             _, axes = plt.subplots(1, 3, figsize=(20, 5))
-            axes[0].imshow(masked[i,:,:,:])
-            axes[1].imshow(pred_img[i,:,:,:] * 1.)
-            axes[2].imshow(ori[i,:,:,:])
+            axes[0].imshow(masked[i,:,:,0])
+            axes[1].imshow(pred_img[i,:,:,0] * 1.)
+            axes[2].imshow(ori[i,:,:,0])
             axes[0].set_title('Masked Image')
             axes[1].set_title('Predicted Image')
             axes[2].set_title('Original Image')
@@ -233,8 +243,26 @@ class MNIST_DCGAN(object):
         # Iterate through each batch of training generator
         for inputs, targets in self.train_generator:
             images_train = inputs
-            images_fake = self.generator.predict(images_train) #Feed the generator the same training as discriminator
+            images_fake = self.generator.predict(images_train)
             images_true = targets
+            valid = np.ones((batch_size, 1))
+            fake = np.zeros((batch_size, 1))
+            
+            # ---------------------
+            #  Train Discriminator
+            # ---------------------
+
+            # Train the discriminator (real classified as ones and generated as zeros)
+            d_loss_real = self.discriminator.train_on_batch(images_true, valid)
+            d_loss_fake = self.discriminator.train_on_batch(images_fake, fake)
+            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+
+            # ---------------------
+            #  Train Generator
+            # ---------------------
+
+            # Train the generator (wants discriminator to mistake images as real)
+            g_loss = self.adversarial.train_on_batch(images_true, valid)
             
             x = np.concatenate((images_train, images_fake))
             y = np.ones([2*batch_size, 1])

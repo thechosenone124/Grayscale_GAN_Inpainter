@@ -90,7 +90,7 @@ class PConvUnet(object):
         # Setup the model inputs / outputs
         model = Model(inputs=[inputs_img, inputs_mask], outputs=outputs)
 
-        return model, inputs_mask    
+        return inputs, outputs   
 
     #Do not run this. The generator has no loss function and should not be compiled    
     def compile_pconv_unet(self, model, inputs_mask, lr=0.0002):
@@ -115,17 +115,21 @@ class PConvUnet(object):
             *args, **kwargs
         )
         
+    #Broken, do not call 
     def predict(self, sample):
         """Run prediction using this model"""
         return self.model.predict(sample)
         
+    #Broken, do not call 
     def summary(self):
         """Get summary of the UNet model"""
         print(self.model.summary())
-
+    
+    #Broken, do not call 
     def save(self):        
         self.model.save_weights(self.current_weightfile())
         
+    #Broken, do not call    
     def load(self, filepath, train_bn=True, lr=0.0002):
 
         # Create UNet-like model
@@ -142,6 +146,7 @@ class PConvUnet(object):
     def current_timestamp():
         return datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     
+    #Broken, do not call 
     # Prediction functions
     ######################
     def predict(self, sample, **kwargs):
