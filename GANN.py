@@ -119,9 +119,9 @@ class DCGAN(object):
         if self.G:
             return
             
-        self.gen_input = self.generator_network.input
-        self.gen_output = self.generator_network.output
-        self.G = self.generator_network.model
+        self.G = self.generator_network
+        self.gen_input = self.G.input
+        self.gen_output = self.G.output
 
     def discriminator_model(self):
         if self.DM:
@@ -144,6 +144,7 @@ class DCGAN(object):
             metrics=['accuracy'])
         return self.AM
 
+# Nothing to do with MNIST
 class MNIST_DCGAN(object):
     def __init__(self):
         self.img_rows = 512
@@ -207,14 +208,14 @@ class MNIST_DCGAN(object):
         self.discriminator =  self.DCGAN.discriminator_model()
         self.adversarial = self.DCGAN.adversarial_model()
         
-    def plot_callback(model):
+    def plot_callback(self, model):
         """Called at the end of each epoch, displaying our previous test images,
         as well as their masked predictions and saving them to disk"""
-        
+        model = self.G
         test_data = next(self.test_generator)
         (masked, mask), ori = test_data
 
-        # # Show side by side
+        # Show side by side
         for i in range(len(ori)):
             _, axes = plt.subplots(1, 3, figsize=(20, 5))
             axes[0].imshow(masked[i,:,:,0])
@@ -239,13 +240,14 @@ class MNIST_DCGAN(object):
             plt.savefig(r'data/test_samples/img_{}_{}.png'.format(i, pred_time))
             plt.close()
     
+    # One epoch
     def train(self, train_steps=2000, batch_size=BATCH_SIZE, save_interval=0):
         noise_input = None
         if save_interval>0:
             noise_input = np.random.uniform(-1.0, 1.0, size=[16, 100])
         # Iterate through each batch of training generator
         for inputs, targets in self.train_generator:
-            images_train = inputs
+            images_train = inputs # [masked, mask]
             images_fake = self.generator.predict(images_train)
             images_true = targets
             valid = np.ones((batch_size, 1))
@@ -265,49 +267,17 @@ class MNIST_DCGAN(object):
             # ---------------------
 
             # Train the generator (wants discriminator to mistake images as real)
-            g_loss = self.adversarial.train_on_batch(images_true, valid)
+            # Reminder, freeze discriminator weights before running generator training
+            g_loss = self.adversarial.train_on_batch(images_train, valid)
             
-            x = np.concatenate((images_train, images_fake))
-            y = np.ones([2*batch_size, 1])
-            y[batch_size:, :] = 0
-            d_loss = self.discriminator.train_on_batch(x, y)
-
-            y = np.ones([batch_size, 1])
-            a_loss = self.adversarial.train_on_batch(images_train, y)
-            log_mesg = "%d: [D loss: %f, acc: %f]" % (i, d_loss[0], d_loss[1])
-            log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, a_loss[0], a_loss[1])
+            log_mesg = "[D loss: %f, acc: %f]" % (d_loss[0], d_loss[1])
+            log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, g_loss[0], g_loss[1])
             print(log_mesg)
             #if save_interval > 0:
                 #not yet ready
                 #if (i+1) % save_interval == 0:
                     #self.plot_images(save2file=True, samples=noise_input.shape[0],\
                     #    noise=noise_input, step=(i+1))
-
-    def plot_images(self, save2file=False, fake=True, samples=16, noise=None, step=0):
-        filename = 'mnist.png'
-        if fake:
-            if noise is None:
-                noise = np.random.uniform(-1.0, 1.0, size=[samples, 100])
-            else:
-                filename = "mnist_%d.png" % step
-            images = self.generator.predict(noise)
-        else:
-            i = np.random.randint(0, self.x_train.shape[0], samples)
-            images = self.x_train[i, :, :, :]
-
-        plt.figure(figsize=(10,10))
-        for i in range(images.shape[0]):
-            plt.subplot(4, 4, i+1)
-            image = images[i, :, :, :]
-            image = np.reshape(image, [self.img_rows, self.img_cols])
-            plt.imshow(image, cmap='gray')
-            plt.axis('off')
-        plt.tight_layout()
-        if save2file:
-            plt.savefig(filename)
-            plt.close('all')
-        else:
-            plt.show()
 
 if __name__ == '__main__':
     mnist_dcgan = MNIST_DCGAN()
