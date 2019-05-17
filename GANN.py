@@ -27,7 +27,7 @@ from MaskGenerator import MaskGenerator
 TRAIN_DIR = "TrainingImages/512px/train"
 VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
-BATCH_SIZE = 256
+BATCH_SIZE = 64
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -144,6 +144,12 @@ class DCGAN(object):
             metrics=['accuracy'])
         return self.AM
 
+    def save_adversarial_weights(self, filepath="AM.h5"):
+        self.AM.save(filepath)
+
+    def load_adversarial_weights(self, filepath="AM.h5"):
+        self.AM.load(filepath)
+
 # Nothing to do with MNIST
 class MNIST_DCGAN(object):
     def __init__(self):
@@ -207,6 +213,7 @@ class MNIST_DCGAN(object):
         self.DCGAN = DCGAN()
         self.discriminator =  self.DCGAN.discriminator_model()
         self.adversarial = self.DCGAN.adversarial_model()
+        self.generator = self.DCGAN.G
         
     def plot_callback(self, model):
         """Called at the end of each epoch, displaying our previous test images,
@@ -241,6 +248,7 @@ class MNIST_DCGAN(object):
             plt.close()
     
     # One epoch
+    # Totally ignore train steps, woopsie
     def train(self, train_steps=2000, batch_size=BATCH_SIZE, save_interval=0):
         noise_input = None
         if save_interval>0:
@@ -258,6 +266,7 @@ class MNIST_DCGAN(object):
             # ---------------------
 
             # Train the discriminator (real classified as ones and generated as zeros)
+            self.discriminator.trainable = true
             d_loss_real = self.discriminator.train_on_batch(images_true, valid)
             d_loss_fake = self.discriminator.train_on_batch(images_fake, fake)
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
@@ -267,22 +276,22 @@ class MNIST_DCGAN(object):
             # ---------------------
 
             # Train the generator (wants discriminator to mistake images as real)
-            # Reminder, freeze discriminator weights before running generator training
+            # Reminder, freeze discriminator weights before running generator training, THIS IS MUY IMPORTANTE DO NOT FORGET NEXT TIME
+            self.discriminator.trainable = false
             g_loss = self.adversarial.train_on_batch(images_train, valid)
             
             log_mesg = "[D loss: %f, acc: %f]" % (d_loss[0], d_loss[1])
             log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, g_loss[0], g_loss[1])
             print(log_mesg)
-            #if save_interval > 0:
-                #not yet ready
-                #if (i+1) % save_interval == 0:
-                    #self.plot_images(save2file=True, samples=noise_input.shape[0],\
-                    #    noise=noise_input, step=(i+1))
+        if save_interval > 0:
+            if save_interval == 0:
+                 self.plot_callback(self.generator)
+                 self.DCGAN.save_adversarial_weights()
 
 if __name__ == '__main__':
     mnist_dcgan = MNIST_DCGAN()
     timer = ElapsedTimer()
-    mnist_dcgan.train(train_steps=10000, batch_size=256, save_interval=500)
-    timer.elapsed_time()
+    mnist_dcgan.train(train_steps=10000, batch_size=BATCH_SIZE, save_interval=0)
+    # timer.elapsed_time()
     #mnist_dcgan.plot_images(fake=True)
     #mnist_dcgan.plot_images(fake=False, save2file=True)
