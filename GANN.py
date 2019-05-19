@@ -266,7 +266,7 @@ class MNIST_DCGAN(object):
             # ---------------------
 
             # Train the discriminator (real classified as ones and generated as zeros)
-            self.discriminator.trainable = true
+            self.discriminator.trainable = True
             d_loss_real = self.discriminator.train_on_batch(images_true, valid)
             d_loss_fake = self.discriminator.train_on_batch(images_fake, fake)
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
@@ -277,7 +277,7 @@ class MNIST_DCGAN(object):
 
             # Train the generator (wants discriminator to mistake images as real)
             # Reminder, freeze discriminator weights before running generator training, THIS IS MUY IMPORTANTE DO NOT FORGET NEXT TIME
-            self.discriminator.trainable = false
+            self.discriminator.trainable = False
             g_loss = self.adversarial.train_on_batch(images_train, valid)
             
             log_mesg = "[D loss: %f, acc: %f]" % (d_loss[0], d_loss[1])
