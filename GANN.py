@@ -86,7 +86,7 @@ class DCGAN(object):
         if self.D:
             return self.D
         self.D = Sequential()
-        depth = 32
+        depth = 16
         dropout = 0.4
         input_shape = (self.img_rows, self.img_cols, self.channel)
         self.D.add(Conv2D(depth*1, 5, strides=2, input_shape=input_shape,
