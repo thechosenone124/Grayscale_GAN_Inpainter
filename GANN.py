@@ -14,7 +14,7 @@ from keras.models import Model
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten, Reshape
 from keras.layers import Conv2D, Conv2DTranspose, UpSampling2D
-from keras.layers import LeakyReLU, Dropout
+from keras.layers import LeakyReLU, Dropout, MaxPooling2D
 from keras.layers import BatchNormalization
 from keras.optimizers import Adam, RMSprop
 from pconv_model import PConvUnet
@@ -86,30 +86,34 @@ class DCGAN(object):
         if self.D:
             return self.D
         self.D = Sequential()
-        depth = 64
+        depth = 32
         dropout = 0.4
-        # In: 28 x 28 x 1, depth = 1
-        # Out: 14 x 14 x 1, depth=64
         input_shape = (self.img_rows, self.img_cols, self.channel)
         self.D.add(Conv2D(depth*1, 5, strides=2, input_shape=input_shape,
             padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(Dropout(dropout))
-
-        self.D.add(Conv2D(depth*2, 5, strides=2, padding='same'))
+        self.D.add(BatchNormalization())
+        self.D.add(MaxPooling2D((2,2)))
+        
+        self.D.add(Conv2D(depth*2, 5, padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(Dropout(dropout))
+        self.D.add(BatchNormalization())
+        self.D.add(MaxPooling2D((2,2)))
 
-        self.D.add(Conv2D(depth*4, 5, strides=2, padding='same'))
+        self.D.add(Conv2D(depth*2, 5, padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(Dropout(dropout))
+        self.D.add(BatchNormalization())
+        self.D.add(MaxPooling2D((2,2)))
 
-        self.D.add(Conv2D(depth*8, 5, strides=1, padding='same'))
+        self.D.add(Conv2D(depth*1, 5, padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(Dropout(dropout))
+        self.D.add(BatchNormalization())
+        self.D.add(MaxPooling2D((2,2)))
 
         # Out: 1-dim probability
         self.D.add(Flatten())
+        self.D.add(Dense(32))
+        self.D.add(Dropout(dropout))
         self.D.add(Dense(1))
         self.D.add(Activation('sigmoid'))
         self.D.summary()
