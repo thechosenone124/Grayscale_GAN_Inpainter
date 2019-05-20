@@ -83,7 +83,7 @@ class PConvUnet(object):
         d_conv12, d_mask12 = decoder_layer(d_conv11, d_mask11, e_conv2, e_mask2, 128, 3)
         d_conv13, d_mask13 = decoder_layer(d_conv12, d_mask12, e_conv1, e_mask1, 64, 3)
         d_conv14, d_mask14 = decoder_layer(d_conv13, d_mask13, inputs_img, inputs_mask, 3, 3, bottleneck=False)
-        outputs = Conv2D(1, 1, activation = 'sigmoid', name='outputs_img')(d_conv16)
+        outputs = Conv2D(1, 1, activation = 'sigmoid', name='outputs_img')(d_conv14)
         
         # Setup the model inputs / outputs
         model = Model(inputs=[inputs_img, inputs_mask], outputs=outputs)
