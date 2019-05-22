@@ -27,7 +27,7 @@ from MaskGenerator import MaskGenerator
 TRAIN_DIR = "TrainingImages/512px/train"
 VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
-BATCH_SIZE = 8
+BATCH_SIZE = 16
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -80,7 +80,7 @@ class DCGAN(object):
         self.gen_output = None
         self.AM = None  # adversarial model
         self.DM = None  # discriminator model
-        self.generator_network = PConvUnet()
+        self.generator_network = PConvUnet(img_rows, img_cols)
 
     def discriminator(self):
         if self.D:
@@ -147,6 +147,7 @@ class DCGAN(object):
             return self.AM
         optimizer = RMSprop(lr=0.0001, decay=3e-8)
         self.build_generator()
+        self.DM.trainable = False # Trainable doesn't do anything until model is compiled, so compiled DM remains trainable individually
         self.AM = Model(self.gen_input, self.DM(self.gen_output))
         print(self.AM.summary()) 
         self.AM.compile(loss='binary_crossentropy', optimizer=optimizer,\
@@ -273,7 +274,6 @@ class MNIST_DCGAN(object):
             # ---------------------
 
             # Train the discriminator (real classified as ones and generated as zeros)
-            self.discriminator.trainable = True
             d_loss_real = self.discriminator.train_on_batch(images_true, valid)
             d_loss_fake = self.discriminator.train_on_batch(images_fake, fake)
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
@@ -283,8 +283,6 @@ class MNIST_DCGAN(object):
             # ---------------------
 
             # Train the generator (wants discriminator to mistake images as real)
-            # Reminder, freeze discriminator weights before running generator training, THIS IS MUY IMPORTANTE DO NOT FORGET NEXT TIME
-            self.discriminator.trainable = False
             g_loss = self.adversarial.train_on_batch(images_train, valid)
             
             log_mesg = "[D loss: %f, acc: %f]" % (d_loss[0], d_loss[1])
