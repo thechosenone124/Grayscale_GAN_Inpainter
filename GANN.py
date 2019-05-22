@@ -27,7 +27,7 @@ from MaskGenerator import MaskGenerator
 TRAIN_DIR = "TrainingImages/512px/train"
 VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
-BATCH_SIZE = 16
+BATCH_SIZE = 8
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -86,7 +86,7 @@ class DCGAN(object):
         if self.D:
             return self.D
         self.D = Sequential()
-        depth = 16
+        depth = 32
         dropout = 0.4
         input_shape = (self.img_rows, self.img_cols, self.channel)
         self.D.add(Conv2D(depth*1, 5, strides=2, input_shape=input_shape,
@@ -94,23 +94,18 @@ class DCGAN(object):
         self.D.add(LeakyReLU(alpha=0.2))
         self.D.add(BatchNormalization())
         self.D.add(MaxPooling2D((2,2)))
-        
+
+        # self.D.add(Conv2D(depth*2, 5, strides=2, padding='same'))
+        # self.D.add(LeakyReLU(alpha=0.2))
+        # self.D.add(BatchNormalization())
+        # self.D.add(MaxPooling2D((2,2)))
+
+        self.D.add(Conv2D(depth*2, 5, strides=2, padding='same'))
+        self.D.add(LeakyReLU(alpha=0.2))
+        self.D.add(BatchNormalization())
+        self.D.add(MaxPooling2D((2,2)))
+
         self.D.add(Conv2D(depth*1, 5, strides=2, padding='same'))
-        self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(BatchNormalization())
-        self.D.add(MaxPooling2D((2,2)))
-
-        self.D.add(Conv2D(depth*2, 5, strides=2, padding='same'))
-        self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(BatchNormalization())
-        self.D.add(MaxPooling2D((2,2)))
-
-        self.D.add(Conv2D(depth*2, 5, strides=2, padding='same'))
-        self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(BatchNormalization())
-        self.D.add(MaxPooling2D((2,2)))
-
-        self.D.add(Conv2D(depth*1, 5,, padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
         self.D.add(BatchNormalization())
         self.D.add(MaxPooling2D((2,2)))
@@ -121,7 +116,7 @@ class DCGAN(object):
         self.D.add(Dropout(dropout))
         self.D.add(Dense(1))
         self.D.add(Activation('sigmoid'))
-        # self.D.summary()
+        self.D.summary()
         return self.D
     #Partial convolutional generator
     def build_generator(self):
@@ -136,8 +131,7 @@ class DCGAN(object):
         if self.DM:
             return self.DM
         optimizer = RMSprop(lr=0.0002, decay=6e-8)
-        self.DM = Sequential()
-        self.DM.add(self.discriminator())
+        self.DM = self.discriminator()
         self.DM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
         return self.DM
@@ -163,6 +157,7 @@ class DCGAN(object):
 # Nothing to do with MNIST
 class MNIST_DCGAN(object):
     def __init__(self):
+        # Set target image size here
         self.img_rows = 256
         self.img_cols = 256
         self.channel = 1
@@ -259,35 +254,44 @@ class MNIST_DCGAN(object):
     # One epoch
     # Totally ignore train steps, woopsie
     def train(self, train_steps=2000, batch_size=BATCH_SIZE, save_interval=0):
-        noise_input = None
-        # Iterate through each batch of training generator
+        step_ctr = 0
+        # ---------------------
+        #  Train Discriminator
+        # ---------------------
         for inputs, targets in self.train_generator:
-            images_train = inputs # [masked[batch_size], mask[batch_size]]
-            print(images_train[0].shape)
-            images_fake = self.generator.predict(images_train)
+            # inputs are [masked[batch_size], mask[batch_size]]
+            images_fake = self.generator.predict(inputs)
             images_true = targets
             valid = np.ones((batch_size, 1))
             fake = np.zeros((batch_size, 1))
-            
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
 
             # Train the discriminator (real classified as ones and generated as zeros)
             d_loss_real = self.discriminator.train_on_batch(images_true, valid)
             d_loss_fake = self.discriminator.train_on_batch(images_fake, fake)
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
-            # ---------------------
-            #  Train Generator
-            # ---------------------
+            log_mesg = "[D loss: %f, acc: %f]" % (d_loss[0], d_loss[1])
+            print(log_mesg)
+            step_ctr += 1
+            if step_ctr >= train_steps:
+                break
+        step_ctr = 0
+        # ---------------------
+        #  Train Generator
+        # ---------------------
+        for inputs, _ in self.train_generator:
+            images_train = inputs
+            valid = np.ones((batch_size, 1))
 
             # Train the generator (wants discriminator to mistake images as real)
             g_loss = self.adversarial.train_on_batch(images_train, valid)
             
-            log_mesg = "[D loss: %f, acc: %f]" % (d_loss[0], d_loss[1])
-            log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, g_loss[0], g_loss[1])
+            log_mesg = "[A loss: %f, acc: %f]" % (g_loss[0], g_loss[1])
             print(log_mesg)
+            step_ctr += 1
+            if step_ctr >= train_steps:
+                break
+
         if save_interval > 0:
             if save_interval == 0:
                  self.plot_callback(self.generator)
