@@ -27,7 +27,7 @@ from MaskGenerator import MaskGenerator
 TRAIN_DIR = "TrainingImages/512px/train"
 VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
-BATCH_SIZE = 8
+BATCH_SIZE = 10
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -116,7 +116,6 @@ class DCGAN(object):
         self.D.add(Dropout(dropout))
         self.D.add(Dense(1))
         self.D.add(Activation('sigmoid'))
-        self.D.summary()
         return self.D
     #Partial convolutional generator
     def build_generator(self):
@@ -130,7 +129,7 @@ class DCGAN(object):
     def discriminator_model(self):
         if self.DM:
             return self.DM
-        optimizer = RMSprop(lr=0.0002, decay=6e-8)
+        optimizer = RMSprop(lr=0.001)
         self.DM = self.discriminator()
         self.DM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
@@ -139,11 +138,10 @@ class DCGAN(object):
     def adversarial_model(self):
         if self.AM:
             return self.AM
-        optimizer = RMSprop(lr=0.0001, decay=3e-8)
+        optimizer = RMSprop(lr=0.01)
         self.build_generator()
         self.DM.trainable = False # Trainable doesn't do anything until model is compiled, so compiled DM remains trainable individually
         self.AM = Model(self.gen_input, self.DM(self.gen_output))
-        print(self.AM.summary()) 
         self.AM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
         return self.AM
@@ -190,6 +188,15 @@ class MNIST_DCGAN(object):
             color_mode="grayscale"
         )
 
+        # Create testing generator
+        self.test_generator = no_aug.flow_from_directory(
+            TEST_DIR, 
+            MaskGenerator(self.img_rows, self.img_cols, 1),
+            target_size=(self.img_rows, self.img_cols), 
+            batch_size=10, 
+            seed=42,
+            color_mode="grayscale"
+        )
         #Display some sample images
         # Pick out an example
         # test_data = next(self.test_generator)
@@ -212,95 +219,64 @@ class MNIST_DCGAN(object):
         """Called at the end of each epoch, displaying our previous test images,
         as well as their masked predictions and saving them to disk"""
 
-        # Create testing generator
-        self.test_generator = no_aug.flow_from_directory(
-            TEST_DIR, 
-            MaskGenerator(self.img_rows, self.img_cols, 1),
-            target_size=(self.img_rows, self.img_cols), 
-            batch_size=BATCH_SIZE, 
-            seed=42,
-            color_mode="grayscale"
-        )
-
-        model = self.G
         test_data = next(self.test_generator)
         (masked, mask), ori = test_data
 
+        # Get samples & Display them        
+        pred_img = model.predict_overlay([masked, mask])
+        # pred_img2 = model.predict([masked, mask])
+        # plt.set_cmap('gray')
         # Show side by side
         for i in range(len(ori)):
-            _, axes = plt.subplots(1, 3, figsize=(20, 5))
+            _, axes = plt.subplots(1, 4, figsize=(20, 5))
             axes[0].imshow(masked[i,:,:,0])
             axes[1].imshow(mask[i,:,:,0] * 1.)
             axes[2].imshow(ori[i,:,:,0])
+            axes[3].imshow(pred_img[i,:,:,0] * 1.)
+            # axes[4].imshow(pred_img2[i,:,:,0] * 1.)
             plt.show()
-
-        # Get samples & Display them        
-        pred_img = model.predict([masked, mask])
-        pred_time = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-
-        # Clear current output and display test images
-        for i in range(len(ori)):
-            _, axes = plt.subplots(1, 3, figsize=(20, 5))
-            axes[0].imshow(masked[i,:,:,0])
-            axes[1].imshow(pred_img[i,:,:,0] * 1.)
-            axes[2].imshow(ori[i,:,:,0])
-            axes[0].set_title('Masked Image')
-            axes[1].set_title('Predicted Image')
-            axes[2].set_title('Original Image')
                     
-            plt.savefig(r'data/test_samples/img_{}_{}.png'.format(i, pred_time))
+            #plt.savefig(r'data/test_samples/img_{}.png'.format(i))
             plt.close()
     
     # One epoch
     # Totally ignore train steps, woopsie
-    def train(self, train_steps=2000, batch_size=BATCH_SIZE, save_interval=0):
+    def train(self, train_steps=100, batch_size=BATCH_SIZE, save_interval=0):
         step_ctr = 0
-        # ---------------------
-        #  Train Discriminator
-        # ---------------------
-        for inputs, targets in self.train_generator:
-            # inputs are [masked[batch_size], mask[batch_size]]
-            images_fake = self.generator.predict(inputs)
-            images_true = targets
+        for images_train, images_true in self.train_generator:
+            # print(images_train[0].shape)
+            images_fake = self.generator.predict_overlay(images_train)
             valid = np.ones((batch_size, 1))
             fake = np.zeros((batch_size, 1))
-
-            # Train the discriminator (real classified as ones and generated as zeros)
+            
+            # ---------------------
+            #  Train Discriminator
+            # ---------------------
             d_loss_real = self.discriminator.train_on_batch(images_true, valid)
             d_loss_fake = self.discriminator.train_on_batch(images_fake, fake)
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
-            log_mesg = "[D loss: %f, acc: %f]" % (d_loss[0], d_loss[1])
-            print(log_mesg)
-            step_ctr += 1
-            if step_ctr >= train_steps:
-                break
-        step_ctr = 0
-        # ---------------------
-        #  Train Generator
-        # ---------------------
-        for inputs, _ in self.train_generator:
-            images_train = inputs
-            valid = np.ones((batch_size, 1))
+            # ---------------------
+            #  Train Generator
+            # ---------------------
 
             # Train the generator (wants discriminator to mistake images as real)
             g_loss = self.adversarial.train_on_batch(images_train, valid)
             
-            log_mesg = "[A loss: %f, acc: %f]" % (g_loss[0], g_loss[1])
+            log_mesg = "[D loss: %f, acc: %f]" % (d_loss[0], d_loss[1])
+            log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, g_loss[0], g_loss[1])
             print(log_mesg)
             step_ctr += 1
             if step_ctr >= train_steps:
                 break
-
-        if save_interval > 0:
-            if save_interval == 0:
-                 self.plot_callback(self.generator)
-                 self.DCGAN.save_adversarial_weights()
+        if save_interval == 0:
+             self.DCGAN.save_adversarial_weights()
+             self.plot_callback(self.generator)
 
 if __name__ == '__main__':
     mnist_dcgan = MNIST_DCGAN()
     timer = ElapsedTimer()
-    mnist_dcgan.train(train_steps=10000, batch_size=BATCH_SIZE, save_interval=0) #Only one epoch
+    mnist_dcgan.train(train_steps=100, batch_size=BATCH_SIZE, save_interval=0) #Only one epoch
     # timer.elapsed_time()
     #mnist_dcgan.plot_images(fake=True)
     #mnist_dcgan.plot_images(fake=False, save2file=True)

@@ -2,7 +2,7 @@ import os
 import sys
 import numpy as np
 from datetime import datetime
-
+from copy import deepcopy
 import tensorflow as tf
 from keras.models import Model
 from keras.models import load_model
@@ -115,9 +115,13 @@ class PConvUnet(object):
             *args, **kwargs
         )
         
-    def predict(self, sample):
-        """Run prediction using this model"""
-        return self.model.predict(sample)
+    def predict_overlay(self, sample):
+        """Run prediction using this model, overlaying the original image on top because that's good image"""
+        masked = deepcopy(sample[0])
+        mask = deepcopy(sample[1])
+        model_output = self.model.predict(sample) * 1.
+        # model_output = np.ma.masked_array(model_output, (mask==1), fill_value=0)
+        return np.where(mask == 1, masked, model_output)
         
     def summary(self):
         """Get summary of the UNet model"""
