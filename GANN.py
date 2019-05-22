@@ -27,7 +27,7 @@ from MaskGenerator import MaskGenerator
 TRAIN_DIR = "TrainingImages/512px/train"
 VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
-BATCH_SIZE = 64
+BATCH_SIZE = 16
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -86,7 +86,7 @@ class DCGAN(object):
         if self.D:
             return self.D
         self.D = Sequential()
-        depth = 16
+        depth = 8
         dropout = 0.4
         input_shape = (self.img_rows, self.img_cols, self.channel)
         self.D.add(Conv2D(depth*1, 5, strides=2, input_shape=input_shape,
@@ -95,6 +95,11 @@ class DCGAN(object):
         self.D.add(BatchNormalization())
         self.D.add(MaxPooling2D((2,2)))
         
+        self.D.add(Conv2D(depth*1, 5, padding='same'))
+        self.D.add(LeakyReLU(alpha=0.2))
+        self.D.add(BatchNormalization())
+        self.D.add(MaxPooling2D((2,2)))
+
         self.D.add(Conv2D(depth*2, 5, padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
         self.D.add(BatchNormalization())
@@ -143,7 +148,7 @@ class DCGAN(object):
         optimizer = RMSprop(lr=0.0001, decay=3e-8)
         self.build_generator()
         self.AM = Model(self.gen_input, self.DM(self.gen_output))
-        
+        print(self.AM.summary()) 
         self.AM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
         return self.AM
@@ -260,6 +265,7 @@ class MNIST_DCGAN(object):
         # Iterate through each batch of training generator
         for inputs, targets in self.train_generator:
             images_train = inputs # [masked, mask]
+            print(images_train[0].shape)
             images_fake = self.generator.predict(images_train)
             images_true = targets
             valid = np.ones((batch_size, 1))

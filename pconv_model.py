@@ -87,7 +87,7 @@ class PConvUnet(object):
         
         # Setup the model inputs / outputs
         model = Model(inputs=[inputs_img, inputs_mask], outputs=outputs)
-
+        print (model.summary())
         return [inputs_img, inputs_mask], outputs, model   
 
     #Do not run this. The generator has no loss function and should not be compiled    
