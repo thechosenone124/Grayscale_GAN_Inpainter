@@ -86,7 +86,7 @@ class DCGAN(object):
         if self.D:
             return self.D
         self.D = Sequential()
-        depth = 8
+        depth = 16
         dropout = 0.4
         input_shape = (self.img_rows, self.img_cols, self.channel)
         self.D.add(Conv2D(depth*1, 5, strides=2, input_shape=input_shape,
@@ -121,7 +121,7 @@ class DCGAN(object):
         self.D.add(Dropout(dropout))
         self.D.add(Dense(1))
         self.D.add(Activation('sigmoid'))
-        self.D.summary()
+        # self.D.summary()
         return self.D
     #Partial convolutional generator
     def build_generator(self):

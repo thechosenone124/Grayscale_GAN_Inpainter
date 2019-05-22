@@ -63,6 +63,7 @@ class PConvUnet(object):
         e_conv5, e_mask5 = encoder_layer(e_conv4, e_mask4, 512, 3)
         e_conv6, e_mask6 = encoder_layer(e_conv5, e_mask5, 512, 3)
         e_conv7, e_mask7 = encoder_layer(e_conv6, e_mask6, 512, 3)
+        e_conv8, e_mask8 = encoder_layer(e_conv7, e_mask7, 512, 3)
         
         # DECODER
         def decoder_layer(img_in, mask_in, e_conv, e_mask, filters, kernel_size, bottleneck=True):
@@ -76,21 +77,22 @@ class PConvUnet(object):
             conv = LeakyReLU(alpha=0.2)(conv)
             return conv, mask
             
-        d_conv8, d_mask8 = decoder_layer(e_conv7, e_mask7, e_conv6, e_mask6, 512, 3)
-        d_conv9, d_mask9 = decoder_layer(d_conv8, d_mask8, e_conv5, e_mask5, 512, 3)
-        d_conv10, d_mask10 = decoder_layer(d_conv9, d_mask9, e_conv4, e_mask4, 512, 3)
-        d_conv11, d_mask11 = decoder_layer(d_conv10, d_mask10, e_conv3, e_mask3, 256, 3)
-        d_conv12, d_mask12 = decoder_layer(d_conv11, d_mask11, e_conv2, e_mask2, 128, 3)
-        d_conv13, d_mask13 = decoder_layer(d_conv12, d_mask12, e_conv1, e_mask1, 64, 3)
-        d_conv14, d_mask14 = decoder_layer(d_conv13, d_mask13, inputs_img, inputs_mask, 3, 3, bottleneck=False)
-        outputs = Conv2D(1, 1, activation = 'sigmoid', name='outputs_img')(d_conv14)
+        d_conv9, d_mask9 = decoder_layer(e_conv8, e_mask8, e_conv7, e_mask7, 512, 3)
+        d_conv10, d_mask10 = decoder_layer(d_conv9, d_mask9, e_conv6, e_mask6, 512, 3)
+        d_conv11, d_mask11 = decoder_layer(d_conv10, d_mask10, e_conv5, e_mask5, 512, 3)
+        d_conv12, d_mask12 = decoder_layer(d_conv11, d_mask11, e_conv4, e_mask4, 512, 3)
+        d_conv13, d_mask13 = decoder_layer(d_conv12, d_mask12, e_conv3, e_mask3, 256, 3)
+        d_conv14, d_mask14 = decoder_layer(d_conv13, d_mask13, e_conv2, e_mask2, 128, 3)
+        d_conv15, d_mask15 = decoder_layer(d_conv14, d_mask14, e_conv1, e_mask1, 64, 3)
+        d_conv16, d_mask16 = decoder_layer(d_conv15, d_mask15, inputs_img, inputs_mask, 3, 3, bottleneck=False)
+        outputs = Conv2D(3, 1, activation = 'sigmoid')(d_conv16) 
         
         # Setup the model inputs / outputs
         model = Model(inputs=[inputs_img, inputs_mask], outputs=outputs)
-        print (model.summary())
+        # print (model.summary())
         return [inputs_img, inputs_mask], outputs, model   
 
-    #Do not run this. The generator has no loss function and should not be compiled    
+    #Do not run this. We do not use generator loss for training.
     def compile_pconv_unet(self, model, inputs_mask, lr=0.0002):
         model.compile(
             optimizer = Adam(lr=lr),
