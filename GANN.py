@@ -69,7 +69,7 @@ class ElapsedTimer(object):
         print("Elapsed: %s " % self.elapsed(time.time() - self.start_time) )
 
 class DCGAN(object):
-    def __init__(self, img_rows=256, img_cols=256, channel=1):
+    def __init__(self, img_rows=512, img_cols=512, channel=1):
 
         self.img_rows = img_rows
         self.img_cols = img_cols
@@ -95,22 +95,22 @@ class DCGAN(object):
         self.D.add(BatchNormalization())
         self.D.add(MaxPooling2D((2,2)))
         
-        # self.D.add(Conv2D(depth*1, 5, padding='same'))
-        # self.D.add(LeakyReLU(alpha=0.2))
-        # self.D.add(BatchNormalization())
-        # self.D.add(MaxPooling2D((2,2)))
-
-        self.D.add(Conv2D(depth*2, 5, padding='same'))
+        self.D.add(Conv2D(depth*1, 5, strides=2, padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
         self.D.add(BatchNormalization())
         self.D.add(MaxPooling2D((2,2)))
 
-        self.D.add(Conv2D(depth*2, 5, padding='same'))
+        self.D.add(Conv2D(depth*2, 5, strides=2, padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
         self.D.add(BatchNormalization())
         self.D.add(MaxPooling2D((2,2)))
 
-        self.D.add(Conv2D(depth*1, 5, padding='same'))
+        self.D.add(Conv2D(depth*2, 5, strides=2, padding='same'))
+        self.D.add(LeakyReLU(alpha=0.2))
+        self.D.add(BatchNormalization())
+        self.D.add(MaxPooling2D((2,2)))
+
+        self.D.add(Conv2D(depth*1, 5,, padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
         self.D.add(BatchNormalization())
         self.D.add(MaxPooling2D((2,2)))
@@ -184,24 +184,13 @@ class MNIST_DCGAN(object):
         )
 
         # Create validation generator
-        val_datagen = AugmentingDataGenerator(rescale=1./255)
-        self.val_generator = val_datagen.flow_from_directory(
+        no_aug = AugmentingDataGenerator(rescale=1./255)
+        self.val_generator = no_aug.flow_from_directory(
             VAL_DIR, 
             MaskGenerator(self.img_rows, self.img_cols, 1),
             target_size=(self.img_rows, self.img_cols), 
             batch_size=BATCH_SIZE, 
             classes=['val'], 
-            seed=42,
-            color_mode="grayscale"
-        )
-
-        # Create testing generator
-        test_datagen = AugmentingDataGenerator(rescale=1./255)
-        self.test_generator = test_datagen.flow_from_directory(
-            TEST_DIR, 
-            MaskGenerator(self.img_rows, self.img_cols, 1),
-            target_size=(self.img_rows, self.img_cols), 
-            batch_size=BATCH_SIZE, 
             seed=42,
             color_mode="grayscale"
         )
@@ -227,6 +216,17 @@ class MNIST_DCGAN(object):
     def plot_callback(self, model):
         """Called at the end of each epoch, displaying our previous test images,
         as well as their masked predictions and saving them to disk"""
+
+        # Create testing generator
+        self.test_generator = no_aug.flow_from_directory(
+            TEST_DIR, 
+            MaskGenerator(self.img_rows, self.img_cols, 1),
+            target_size=(self.img_rows, self.img_cols), 
+            batch_size=BATCH_SIZE, 
+            seed=42,
+            color_mode="grayscale"
+        )
+
         model = self.G
         test_data = next(self.test_generator)
         (masked, mask), ori = test_data
