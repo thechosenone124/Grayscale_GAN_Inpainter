@@ -69,7 +69,7 @@ class ElapsedTimer(object):
         print("Elapsed: %s " % self.elapsed(time.time() - self.start_time) )
 
 class DCGAN(object):
-    def __init__(self, img_rows=512, img_cols=512, channel=1):
+    def __init__(self, img_rows=256, img_cols=256, channel=1):
 
         self.img_rows = img_rows
         self.img_cols = img_cols
@@ -95,10 +95,10 @@ class DCGAN(object):
         self.D.add(BatchNormalization())
         self.D.add(MaxPooling2D((2,2)))
         
-        self.D.add(Conv2D(depth*1, 5, padding='same'))
-        self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(BatchNormalization())
-        self.D.add(MaxPooling2D((2,2)))
+        # self.D.add(Conv2D(depth*1, 5, padding='same'))
+        # self.D.add(LeakyReLU(alpha=0.2))
+        # self.D.add(BatchNormalization())
+        # self.D.add(MaxPooling2D((2,2)))
 
         self.D.add(Conv2D(depth*2, 5, padding='same'))
         self.D.add(LeakyReLU(alpha=0.2))
@@ -162,8 +162,8 @@ class DCGAN(object):
 # Nothing to do with MNIST
 class MNIST_DCGAN(object):
     def __init__(self):
-        self.img_rows = 512
-        self.img_cols = 512
+        self.img_rows = 256
+        self.img_cols = 256
         self.channel = 1
         #set up input
         # Create training generator
@@ -176,8 +176,8 @@ class MNIST_DCGAN(object):
         )
         self.train_generator = train_datagen.flow_from_directory(
             TRAIN_DIR, 
-            MaskGenerator(512, 512, 1),
-            target_size=(512, 512), 
+            MaskGenerator(self.img_rows, self.img_cols, 1),
+            target_size=(self.img_rows, self.img_cols), 
             batch_size=BATCH_SIZE,
             color_mode="grayscale"
         )
@@ -186,8 +186,8 @@ class MNIST_DCGAN(object):
         val_datagen = AugmentingDataGenerator(rescale=1./255)
         self.val_generator = val_datagen.flow_from_directory(
             VAL_DIR, 
-            MaskGenerator(512, 512, 1), 
-            target_size=(512, 512), 
+            MaskGenerator(self.img_rows, self.img_cols, 1),
+            target_size=(self.img_rows, self.img_cols), 
             batch_size=BATCH_SIZE, 
             classes=['val'], 
             seed=42,
@@ -198,14 +198,13 @@ class MNIST_DCGAN(object):
         test_datagen = AugmentingDataGenerator(rescale=1./255)
         self.test_generator = test_datagen.flow_from_directory(
             TEST_DIR, 
-            MaskGenerator(512, 512, 1), 
-            target_size=(512, 512), 
+            MaskGenerator(self.img_rows, self.img_cols, 1),
+            target_size=(self.img_rows, self.img_cols), 
             batch_size=BATCH_SIZE, 
             seed=42,
             color_mode="grayscale"
         )
-        #yep
-        
+
         #Display some sample images
         # Pick out an example
         # test_data = next(self.test_generator)
@@ -219,11 +218,11 @@ class MNIST_DCGAN(object):
             # axes[2].imshow(ori[i,:,:,0])
             # plt.show()
 
-        self.DCGAN = DCGAN()
-        self.discriminator =  self.DCGAN.discriminator_model()
+        self.DCGAN = DCGAN(self.img_rows, self.img_cols)
+        self.discriminator = self.DCGAN.discriminator_model()
         self.adversarial = self.DCGAN.adversarial_model()
         self.generator = self.DCGAN.G
-        
+
     def plot_callback(self, model):
         """Called at the end of each epoch, displaying our previous test images,
         as well as their masked predictions and saving them to disk"""
@@ -260,11 +259,9 @@ class MNIST_DCGAN(object):
     # Totally ignore train steps, woopsie
     def train(self, train_steps=2000, batch_size=BATCH_SIZE, save_interval=0):
         noise_input = None
-        if save_interval>0:
-            noise_input = np.random.uniform(-1.0, 1.0, size=[16, 100])
         # Iterate through each batch of training generator
         for inputs, targets in self.train_generator:
-            images_train = inputs # [masked, mask]
+            images_train = inputs # [masked[batch_size], mask[batch_size]]
             print(images_train[0].shape)
             images_fake = self.generator.predict(images_train)
             images_true = targets
@@ -301,7 +298,7 @@ class MNIST_DCGAN(object):
 if __name__ == '__main__':
     mnist_dcgan = MNIST_DCGAN()
     timer = ElapsedTimer()
-    mnist_dcgan.train(train_steps=10000, batch_size=BATCH_SIZE, save_interval=0)
+    mnist_dcgan.train(train_steps=10000, batch_size=BATCH_SIZE, save_interval=0) #Only one epoch
     # timer.elapsed_time()
     #mnist_dcgan.plot_images(fake=True)
     #mnist_dcgan.plot_images(fake=False, save2file=True)
