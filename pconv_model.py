@@ -85,8 +85,8 @@ class PConvUnet(object):
         d_conv14, d_mask14 = decoder_layer(d_conv13, d_mask13, e_conv2, e_mask2, 128, 3)
         d_conv15, d_mask15 = decoder_layer(d_conv14, d_mask14, e_conv1, e_mask1, 64, 3)
         d_conv16, d_mask16 = decoder_layer(d_conv15, d_mask15, inputs_img, inputs_mask, 3, 3, bottleneck=False)
-        outputs = Conv2D(1, 1, activation = 'sigmoid')(d_conv16) 
-        
+        outputs = Conv2D(1, 1, activation = 'sigmoid')(d_conv16)
+
         # Setup the model inputs / outputs
         model = Model(inputs=[inputs_img, inputs_mask], outputs=outputs)
         # print (model.summary())
@@ -114,12 +114,12 @@ class PConvUnet(object):
             generator,
             *args, **kwargs
         )
-        
-    def predict_overlay(self, sample):
+    # obsolete    
+    def predict_overlay(self, sample, **kwargs):
         """Run prediction using this model, overlaying the original image on top because that's good image"""
         masked = deepcopy(sample[0])
         mask = deepcopy(sample[1])
-        model_output = self.model.predict(sample) * 1.
+        model_output = self.model.predict(sample, **kwargs) * 1.
         # model_output = np.ma.masked_array(model_output, (mask==1), fill_value=0)
         return np.where(mask == 1, masked, model_output)
         

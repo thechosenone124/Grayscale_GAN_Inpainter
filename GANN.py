@@ -13,7 +13,7 @@ from copy import deepcopy
 from keras.models import Model
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten, Reshape
-from keras.layers import Conv2D, Conv2DTranspose, UpSampling2D
+from keras.layers import Conv2D, Input, Concatenate
 from keras.layers import LeakyReLU, Dropout, MaxPooling2D
 from keras.layers import BatchNormalization
 from keras.optimizers import Adam, RMSprop
@@ -28,6 +28,7 @@ TRAIN_DIR = "TrainingImages/512px/train"
 VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
 BATCH_SIZE = 10
+MODEL_FILEPATH = "AM.h5"
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -68,6 +69,7 @@ class ElapsedTimer(object):
     def elapsed_time(self):
         print("Elapsed: %s " % self.elapsed(time.time() - self.start_time) )
 
+
 class DCGAN(object):
     def __init__(self, img_rows=512, img_cols=512, channel=1):
 
@@ -81,42 +83,43 @@ class DCGAN(object):
         self.AM = None  # adversarial model
         self.DM = None  # discriminator model
         self.generator_network = PConvUnet(img_rows, img_cols)
+   
+    def my_usual_layer(self, depth, img, pooling=True):
+        out = Conv2D(depth, 5, strides=2, padding='same')(img)
+        out1 = LeakyReLU(alpha=0.2)(out)
+        out2 = BatchNormalization()(out1)
+        out3 = MaxPooling2D((2,2))(out2)
+        if pooling:
+            return out3
+        return out2        
 
     def discriminator(self):
         if self.D:
             return self.D
-        self.D = Sequential()
+
+        
+        masked_img = Input((self.img_rows, self.img_cols, 1))
+        filled_img = Input((self.img_rows, self.img_cols, 1))
+
         depth = 32
-        dropout = 0.4
         input_shape = (self.img_rows, self.img_cols, self.channel)
-        self.D.add(Conv2D(depth*1, 5, strides=2, input_shape=input_shape,
-            padding='same'))
-        self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(BatchNormalization())
-        self.D.add(MaxPooling2D((2,2)))
 
-        # self.D.add(Conv2D(depth*2, 5, strides=2, padding='same'))
-        # self.D.add(LeakyReLU(alpha=0.2))
-        # self.D.add(BatchNormalization())
-        # self.D.add(MaxPooling2D((2,2)))
+        masked1 = self.my_usual_layer(depth, masked_img)
+        fill1 = self.my_usual_layer(depth, filled_img)
+        
+        combined = Concatenate(axis=3)([masked1, fill1])
 
-        self.D.add(Conv2D(depth*2, 5, strides=2, padding='same'))
-        self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(BatchNormalization())
-        self.D.add(MaxPooling2D((2,2)))
+        combined1 = self.my_usual_layer(depth*2, combined)
+        combined2 =  self.my_usual_layer(depth, combined1, pooling=False)
 
-        self.D.add(Conv2D(depth*1, 5, strides=2, padding='same'))
-        self.D.add(LeakyReLU(alpha=0.2))
-        self.D.add(BatchNormalization())
-        self.D.add(MaxPooling2D((2,2)))
+        flattened = Flatten()(combined2)
+        dense1 = Dense(32)(flattened)
+        output = Dense(1, activation='sigmoid')(dense1)
 
-        # Out: 1-dim probability
-        self.D.add(Flatten())
-        self.D.add(Dense(32))
-        self.D.add(Dropout(dropout))
-        self.D.add(Dense(1))
-        self.D.add(Activation('sigmoid'))
+        self.D = Model(inputs=[masked_img, filled_img], outputs=output)
+        print(self.D.summary())
         return self.D
+
     #Partial convolutional generator
     def build_generator(self):
         if self.G:
@@ -138,18 +141,18 @@ class DCGAN(object):
     def adversarial_model(self):
         if self.AM:
             return self.AM
-        optimizer = RMSprop(lr=0.01)
+        optimizer = RMSprop(lr=0.01, decay=9e-5)
         self.build_generator()
         self.DM.trainable = False # Trainable doesn't do anything until model is compiled, so compiled DM remains trainable individually
-        self.AM = Model(self.gen_input, self.DM(self.gen_output))
+        self.AM = Model(self.gen_input, self.DM([self.gen_input[0], self.gen_output]))
         self.AM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
         return self.AM
 
-    def save_adversarial_weights(self, filepath="AM.h5"):
+    def save_adversarial_weights(self, filepath=MODEL_FILEPATH):
         self.AM.save(filepath)
 
-    def load_adversarial_weights(self, filepath="AM.h5"):
+    def load_adversarial_weights(self, filepath=MODEL_FILEPATH):
         self.AM.load(filepath)
 
 # Nothing to do with MNIST
@@ -223,7 +226,7 @@ class MNIST_DCGAN(object):
         (masked, mask), ori = test_data
 
         # Get samples & Display them        
-        pred_img = model.predict_overlay([masked, mask])
+        pred_img = model.predict([masked, mask])
         # pred_img2 = model.predict([masked, mask])
         # plt.set_cmap('gray')
         # Show side by side
@@ -241,19 +244,19 @@ class MNIST_DCGAN(object):
     
     # One epoch
     # Totally ignore train steps, woopsie
-    def train(self, train_steps=100, batch_size=BATCH_SIZE, save_interval=0):
+    def train(self, train_steps=None, batch_size=BATCH_SIZE, save_interval=0):
         step_ctr = 0
         for images_train, images_true in self.train_generator:
             # print(images_train[0].shape)
-            images_fake = self.generator.predict_overlay(images_train)
+            images_fake = self.generator.predict(images_train)
             valid = np.ones((batch_size, 1))
             fake = np.zeros((batch_size, 1))
             
             # ---------------------
             #  Train Discriminator
             # ---------------------
-            d_loss_real = self.discriminator.train_on_batch(images_true, valid)
-            d_loss_fake = self.discriminator.train_on_batch(images_fake, fake)
+            d_loss_real = self.discriminator.train_on_batch([images_train[0], images_true], valid)
+            d_loss_fake = self.discriminator.train_on_batch([images_train[0], images_fake], fake)
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
             # ---------------------
@@ -267,7 +270,7 @@ class MNIST_DCGAN(object):
             log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, g_loss[0], g_loss[1])
             print(log_mesg)
             step_ctr += 1
-            if step_ctr >= train_steps:
+            if train_steps is not None and step_ctr >= train_steps:
                 break
         if save_interval == 0:
              self.DCGAN.save_adversarial_weights()
@@ -276,7 +279,8 @@ class MNIST_DCGAN(object):
 if __name__ == '__main__':
     mnist_dcgan = MNIST_DCGAN()
     timer = ElapsedTimer()
-    mnist_dcgan.train(train_steps=100, batch_size=BATCH_SIZE, save_interval=0) #Only one epoch
+    # mnist.dcgan.load_adversarial_weights()
+    mnist_dcgan.train(train_steps=200, batch_size=BATCH_SIZE, save_interval=0) #Only one epoch
     # timer.elapsed_time()
     #mnist_dcgan.plot_images(fake=True)
     #mnist_dcgan.plot_images(fake=False, save2file=True)
