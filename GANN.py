@@ -91,32 +91,28 @@ class DCGAN(object):
         out3 = MaxPooling2D((2,2))(out2)
         if pooling:
             return out3
-        return out2        
-
+        return out2  
+        
+    # Takes in an image and a mask, and determines if the area under the mask is real or fake
     def discriminator(self):
         if self.D:
             return self.D
 
-        
-        masked_img = Input((self.img_rows, self.img_cols, 1))
+        mask = Input((self.img_rows, self.img_cols, 1))
         filled_img = Input((self.img_rows, self.img_cols, 1))
-
-        depth = 32
-        input_shape = (self.img_rows, self.img_cols, self.channel)
-
-        masked1 = self.my_usual_layer(depth, masked_img)
-        fill1 = self.my_usual_layer(depth, filled_img)
         
-        combined = Concatenate(axis=3)([masked1, fill1])
+        combined = Concatenate(axis=3)([mask, filled_img]) # Overlay mask and filled image
+        
+        depth = 32
+        combined1 = self.my_usual_layer(depth, combined)
+        combined2 = self.my_usual_layer(depth*2, combined1)
+        combined3 =  self.my_usual_layer(depth, combined2, pooling=False)
 
-        combined1 = self.my_usual_layer(depth*2, combined)
-        combined2 =  self.my_usual_layer(depth, combined1, pooling=False)
-
-        flattened = Flatten()(combined2)
+        flattened = Flatten()(combined3)
         dense1 = Dense(32)(flattened)
         output = Dense(1, activation='sigmoid')(dense1)
 
-        self.D = Model(inputs=[masked_img, filled_img], outputs=output)
+        self.D = Model(inputs=[mask, filled_img], outputs=output)
         print(self.D.summary())
         return self.D
 
@@ -129,22 +125,25 @@ class DCGAN(object):
         self.gen_input = self.G.input
         self.gen_output = self.G.output
 
-    def discriminator_model(self):
-        if self.DM:
-            return self.DM
+    def compile_discriminator(self):
         optimizer = RMSprop(lr=0.001)
         self.DM = self.discriminator()
         self.DM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
-        return self.DM
 
-    def adversarial_model(self):
+    def adversarial_model(self, file=None):
         if self.AM:
             return self.AM
         optimizer = RMSprop(lr=0.01, decay=9e-5)
+        #build discriminator and generator
         self.build_generator()
-        self.DM.trainable = False # Trainable doesn't do anything until model is compiled, so compiled DM remains trainable individually
-        self.AM = Model(self.gen_input, self.DM([self.gen_input[0], self.gen_output]))
+        self.AM = Model(self.gen_input, self.DM([self.gen_input[1], self.gen_output]))
+        
+        if file is not None:
+            self.load_adversarial_weights(file)
+            
+        self.compile_discriminator() # Discriminator is compiled trainable
+        self.DM.trainable = False # Adversarial model is for generator training
         self.AM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
         return self.AM
@@ -152,8 +151,8 @@ class DCGAN(object):
     def save_adversarial_weights(self, filepath=MODEL_FILEPATH):
         self.AM.save(filepath)
 
-    def load_adversarial_weights(self, filepath=MODEL_FILEPATH):
-        self.AM.load(filepath)
+    def load_adversarial_weights(self, filepath):
+        self.AM.load_model(filepath)
 
 # Nothing to do with MNIST
 class MNIST_DCGAN(object):
@@ -255,8 +254,8 @@ class MNIST_DCGAN(object):
             # ---------------------
             #  Train Discriminator
             # ---------------------
-            d_loss_real = self.discriminator.train_on_batch([images_train[0], images_true], valid)
-            d_loss_fake = self.discriminator.train_on_batch([images_train[0], images_fake], fake)
+            d_loss_real = self.discriminator.train_on_batch([images_train[1], images_true], valid)
+            d_loss_fake = self.discriminator.train_on_batch([images_train[1], images_fake], fake)
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
             # ---------------------

@@ -49,7 +49,7 @@ class PConvUnet(object):
         # ENCODER
         def encoder_layer(img_in, mask_in, filters, kernel_size, bottleneck=True):
             conv, mask = PConv2D(filters, kernel_size, strides=2, padding='same')([img_in, mask_in])
-            if bottleneck: #UNET architecture: a skip connection so low level data doesnt have to pass through whole network
+            if bottleneck:
                 conv = BatchNormalization(name='EncBN'+str(encoder_layer.counter))(conv, training=train_bn)
             conv = Activation('relu')(conv)
             encoder_layer.counter += 1
@@ -72,7 +72,7 @@ class PConvUnet(object):
             concat_img = Concatenate(axis=3)([e_conv,up_img])
             concat_mask = Concatenate(axis=3)([e_mask,up_mask])
             conv, mask = PConv2D(filters, kernel_size, padding='same')([concat_img, concat_mask])
-            if bottleneck: #UNET architecture: a skip connection so low level data doesnt have to pass through whole network
+            if bottleneck:
                 conv = BatchNormalization()(conv)
             conv = LeakyReLU(alpha=0.2)(conv)
             return conv, mask
@@ -90,38 +90,7 @@ class PConvUnet(object):
         # Setup the model inputs / outputs
         model = Model(inputs=[inputs_img, inputs_mask], outputs=outputs)
         # print (model.summary())
-        return [inputs_img, inputs_mask], outputs, model   
-
-    #Do not run this. We do not use generator loss for training.
-    def compile_pconv_unet(self, model, inputs_mask, lr=0.0002):
-        model.compile(
-            optimizer = Adam(lr=lr),
-            #We don't need this, we have discriminator loss
-            #loss=self.loss_total(inputs_mask),
-            metrics=[self.PSNR]
-        )
-    
-    #This is for training the generator the conventional way, we have our GANN training
-    def fit_generator(self, generator, *args, **kwargs):
-        """Fit the U-Net to a (images, targets) generator
-
-        Args:
-            generator (generator): generator supplying input image & mask, as well as targets.
-            *args: arguments to be passed to fit_generator
-            **kwargs: keyword arguments to be passed to fit_generator
-        """
-        self.model.fit_generator(
-            generator,
-            *args, **kwargs
-        )
-    # obsolete    
-    def predict_overlay(self, sample, **kwargs):
-        """Run prediction using this model, overlaying the original image on top because that's good image"""
-        masked = deepcopy(sample[0])
-        mask = deepcopy(sample[1])
-        model_output = self.model.predict(sample, **kwargs) * 1.
-        # model_output = np.ma.masked_array(model_output, (mask==1), fill_value=0)
-        return np.where(mask == 1, masked, model_output)
+        return [inputs_img, inputs_mask], outputs, model
         
     def summary(self):
         """Get summary of the UNet model"""
