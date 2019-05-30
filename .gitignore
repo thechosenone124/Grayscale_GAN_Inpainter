@@ -1,2 +1,3 @@
 TrainingImages/512px
 __pycache__/
+*.out
