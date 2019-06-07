@@ -29,6 +29,7 @@ VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
 BATCH_SIZE = 10
 MODEL_FILEPATH = "AM.h5"
+NUM_EPOCHS=20
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -97,11 +98,11 @@ class DCGAN(object):
     def discriminator(self):
         if self.D:
             return self.D
-
+        masked_image = Input((self.img_rows, self.img_cols, 1))
         mask = Input((self.img_rows, self.img_cols, 1))
         filled_img = Input((self.img_rows, self.img_cols, 1))
         
-        combined = Concatenate(axis=3)([mask, filled_img]) # Overlay mask and filled image
+        combined = Concatenate(axis=3)([masked_image, mask, filled_img]) # Overlay mask and filled image
         
         depth = 32
         combined1 = self.my_usual_layer(depth, combined)
@@ -112,7 +113,7 @@ class DCGAN(object):
         dense1 = Dense(32)(flattened)
         output = Dense(1, activation='sigmoid')(dense1)
 
-        self.D = Model(inputs=[mask, filled_img], outputs=output)
+        self.D = Model(inputs=[masked_image, mask, filled_img], outputs=output)
         print(self.D.summary())
         return self.D
 
@@ -125,9 +126,9 @@ class DCGAN(object):
         self.gen_input = self.G.input
         self.gen_output = self.G.output
 
-    def compile_discriminator(self):
+    def compile_discriminator(self, trainable=True):
+        self.DM.trainable = trainable 
         optimizer = RMSprop(lr=0.001)
-        self.DM = self.discriminator()
         self.DM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
 
@@ -137,7 +138,8 @@ class DCGAN(object):
         optimizer = RMSprop(lr=0.01, decay=9e-5)
         #build discriminator and generator
         self.build_generator()
-        self.AM = Model(self.gen_input, self.DM([self.gen_input[1], self.gen_output]))
+        self.DM = self.discriminator()
+        self.AM = Model(self.gen_input, self.DM([self.gen_input[0], self.gen_input[1], self.gen_output]))
         
         if file is not None:
             self.load_adversarial_weights(file)
@@ -149,14 +151,14 @@ class DCGAN(object):
         return self.AM
 
     def save_adversarial_weights(self, filepath=MODEL_FILEPATH):
-        self.AM.save(filepath)
+        self.AM.save_weights(filepath)
 
     def load_adversarial_weights(self, filepath):
-        self.AM.load_model(filepath)
+        self.AM.load_weights(filepath)
 
 # Nothing to do with MNIST
 class MNIST_DCGAN(object):
-    def __init__(self):
+    def __init__(self, file=None):
         # Set target image size here
         self.img_rows = 256
         self.img_cols = 256
@@ -184,8 +186,7 @@ class MNIST_DCGAN(object):
             VAL_DIR, 
             MaskGenerator(self.img_rows, self.img_cols, 1),
             target_size=(self.img_rows, self.img_cols), 
-            batch_size=BATCH_SIZE, 
-            classes=['val'], 
+            batch_size=BATCH_SIZE,
             seed=42,
             color_mode="grayscale"
         )
@@ -213,8 +214,8 @@ class MNIST_DCGAN(object):
             # plt.show()
 
         self.DCGAN = DCGAN(self.img_rows, self.img_cols)
-        self.discriminator = self.DCGAN.discriminator_model()
-        self.adversarial = self.DCGAN.adversarial_model()
+        self.adversarial = self.DCGAN.adversarial_model(file)
+        self.discriminator = self.DCGAN.DM
         self.generator = self.DCGAN.G
 
     def plot_callback(self, model):
@@ -243,21 +244,21 @@ class MNIST_DCGAN(object):
     
     # One epoch
     # Totally ignore train steps, woopsie
-    def train(self, train_steps=None, batch_size=BATCH_SIZE, save_interval=0):
+    def train(self, train_steps=None, val_steps=25, save_interval=0):
         step_ctr = 0
         for images_train, images_true in self.train_generator:
             # print(images_train[0].shape)
             images_fake = self.generator.predict(images_train)
-            valid = np.ones((batch_size, 1))
-            fake = np.zeros((batch_size, 1))
-            
+            valid = np.ones((len(images_train[0]), 1))
+            fake = np.zeros((len(images_train[0]), 1))
+            log_msg = None
             # ---------------------
             #  Train Discriminator
             # ---------------------
-            d_loss_real = self.discriminator.train_on_batch([images_train[1], images_true], valid)
-            d_loss_fake = self.discriminator.train_on_batch([images_train[1], images_fake], fake)
+            d_loss_real = self.discriminator.train_on_batch([images_train[0], images_train[1], images_true], valid)
+            d_loss_fake = self.discriminator.train_on_batch([images_train[0], images_train[1], images_fake], fake)
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-
+            log_mesg = "%d [D loss: %f, acc: %f]" % (step_ctr, d_loss[0], d_loss[1])
             # ---------------------
             #  Train Generator
             # ---------------------
@@ -265,21 +266,45 @@ class MNIST_DCGAN(object):
             # Train the generator (wants discriminator to mistake images as real)
             g_loss = self.adversarial.train_on_batch(images_train, valid)
             
-            log_mesg = "[D loss: %f, acc: %f]" % (d_loss[0], d_loss[1])
             log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, g_loss[0], g_loss[1])
             print(log_mesg)
             step_ctr += 1
             if train_steps is not None and step_ctr >= train_steps:
                 break
+
+        val_d_losses = np.array([])
+        val_g_losses = np.array([])
+        step_ctr = 0
+        for input_data, images_true in self.val_generator:
+            images_fake = self.generator.predict(input_data)
+            valid = np.ones((len(input_data[0]), 1))
+            fake = np.zeros((len(input_data[0]), 1))
+
+            d_loss_real = self.discriminator.test_on_batch([input_data[0], input_data[1], images_true], valid)
+            d_loss_fake = self.discriminator.test_on_batch([input_data[0], input_data[1], images_fake], fake)
+            val_d_losses = np.append(val_d_losses, 0.5 * np.add(d_loss_real, d_loss_fake)[1])
+
+            val_g_losses= np.append(val_g_losses, self.adversarial.test_on_batch(input_data, valid)[1])
+            step_ctr += 1
+            if step_ctr >= val_steps:
+                break
+        d_loss = np.average(val_d_losses)
+        g_loss = np.average(val_g_losses)
+        print(f'Epoch {NUM_EPOCHS-save_interval}: val_d_acc: {d_loss}; val_g_acc: {g_loss}')
+            
         if save_interval == 0:
-             self.DCGAN.save_adversarial_weights()
+             self.DCGAN.save_adversarial_weights("AM.h5")
              self.plot_callback(self.generator)
 
 if __name__ == '__main__':
     mnist_dcgan = MNIST_DCGAN()
-    timer = ElapsedTimer()
-    # mnist.dcgan.load_adversarial_weights()
-    mnist_dcgan.train(train_steps=200, batch_size=BATCH_SIZE, save_interval=0) #Only one epoch
+    # mnist_dcgan = MNIST_DCGAN(file="AM.h5")
+    if len(sys.argv) == 1:
+        for i in reversed(range(NUM_EPOCHS)):
+            mnist_dcgan.train(train_steps=100, save_interval=i)
+    else:
+        mnist_dcgan.plot_callback(mnist_dcgan.generator)
+        
     # timer.elapsed_time()
     #mnist_dcgan.plot_images(fake=True)
     #mnist_dcgan.plot_images(fake=False, save2file=True)
