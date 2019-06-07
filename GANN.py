@@ -14,9 +14,9 @@ from keras.models import Model
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten, Reshape
 from keras.layers import Conv2D, Input, Concatenate
-from keras.layers import LeakyReLU, Dropout, MaxPooling2D
-from keras.layers import BatchNormalization
-from keras.optimizers import Adam, RMSprop
+from keras.layers import LeakyReLU, Dropout, AveragePooling2D
+from keras.layers import BatchNormalization, GaussianNoise
+from keras.optimizers import Adam, RMSprop, SGD
 from pconv_model import PConvUnet
 import matplotlib.pyplot as plt
 
@@ -29,7 +29,7 @@ VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
 BATCH_SIZE = 10
 MODEL_FILEPATH = "AM.h5"
-NUM_EPOCHS=20
+NUM_EPOCHS=100
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -89,7 +89,7 @@ class DCGAN(object):
         out = Conv2D(depth, 5, strides=2, padding='same')(img)
         out1 = LeakyReLU(alpha=0.2)(out)
         out2 = BatchNormalization()(out1)
-        out3 = MaxPooling2D((2,2))(out2)
+        out3 = AveragePooling2D((2,2))(out2)
         if pooling:
             return out3
         return out2  
@@ -99,11 +99,12 @@ class DCGAN(object):
         if self.D:
             return self.D
         masked_image = Input((self.img_rows, self.img_cols, 1))
-        mask = Input((self.img_rows, self.img_cols, 1))
-        filled_img = Input((self.img_rows, self.img_cols, 1))
+        mask =         Input((self.img_rows, self.img_cols, 1))
+        filled_img =   Input((self.img_rows, self.img_cols, 1))
         
+        #masked2 = GaussianNoise(0.001)(masked_image)
+        #filled2 = GaussianNoise(0.001)(filled_img)
         combined = Concatenate(axis=3)([masked_image, mask, filled_img]) # Overlay mask and filled image
-        
         depth = 32
         combined1 = self.my_usual_layer(depth, combined)
         combined2 = self.my_usual_layer(depth*2, combined1)
@@ -114,7 +115,6 @@ class DCGAN(object):
         output = Dense(1, activation='sigmoid')(dense1)
 
         self.D = Model(inputs=[masked_image, mask, filled_img], outputs=output)
-        print(self.D.summary())
         return self.D
 
     #Partial convolutional generator
@@ -128,14 +128,14 @@ class DCGAN(object):
 
     def compile_discriminator(self, trainable=True):
         self.DM.trainable = trainable 
-        optimizer = RMSprop(lr=0.001)
+        optimizer = SGD(lr=0.0001)
         self.DM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
 
     def adversarial_model(self, file=None):
         if self.AM:
             return self.AM
-        optimizer = RMSprop(lr=0.01, decay=9e-5)
+        optimizer = Adam(lr=0.001)
         #build discriminator and generator
         self.build_generator()
         self.DM = self.discriminator()
@@ -146,8 +146,11 @@ class DCGAN(object):
             
         self.compile_discriminator() # Discriminator is compiled trainable
         self.DM.trainable = False # Adversarial model is for generator training
+        self.AM.layers[-1].trainable = False
         self.AM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
+        print(self.DM.summary())
+        print(self.AM.summary())
         return self.AM
 
     def save_adversarial_weights(self, filepath=MODEL_FILEPATH):
@@ -236,10 +239,9 @@ class MNIST_DCGAN(object):
             axes[1].imshow(mask[i,:,:,0] * 1.)
             axes[2].imshow(ori[i,:,:,0])
             axes[3].imshow(pred_img[i,:,:,0] * 1.)
-            # axes[4].imshow(pred_img2[i,:,:,0] * 1.)
             plt.show()
                     
-            #plt.savefig(r'data/test_samples/img_{}.png'.format(i))
+            plt.savefig(r'img_{}.png'.format(i))
             plt.close()
     
     # One epoch
@@ -291,14 +293,16 @@ class MNIST_DCGAN(object):
         d_loss = np.average(val_d_losses)
         g_loss = np.average(val_g_losses)
         print(f'Epoch {NUM_EPOCHS-save_interval}: val_d_acc: {d_loss}; val_g_acc: {g_loss}')
-            
+        if (save_interval + 1) % 10 == 0:
+             filepath = r"AM_Epoch{}.h5".format(NUM_EPOCHS-save_interval)
+             self.DCGAN.save_adversarial_weights(filepath)    
         if save_interval == 0:
              self.DCGAN.save_adversarial_weights("AM.h5")
              self.plot_callback(self.generator)
 
 if __name__ == '__main__':
     mnist_dcgan = MNIST_DCGAN()
-    # mnist_dcgan = MNIST_DCGAN(file="AM.h5")
+    # mnist_dcgan = MNIST_DCGAN(file=MODEL_FILEPATH)
     if len(sys.argv) == 1:
         for i in reversed(range(NUM_EPOCHS)):
             mnist_dcgan.train(train_steps=100, save_interval=i)
