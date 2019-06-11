@@ -344,9 +344,9 @@ if __name__ == '__main__':
         # mnist_dcgan = MNIST_DCGAN(file=MODEL_FILEPATH)
         g_loss = 0
         for i in reversed(range(NUM_EPOCHS)):
-            if g_loss > 2.0:
+            if g_loss < 2.0:
                 g_loss = mnist_dcgan.train(train_steps=100, save_interval=i)
-            else
+            else:
                 g_loss = mnist_dcgan.traingenerator(train_steps=100, save_interval=i)
             print(f'Epoch Gen Loss: {g_loss}')
     else:
