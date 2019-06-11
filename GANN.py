@@ -29,7 +29,7 @@ VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
 BATCH_SIZE = 10
 MODEL_FILEPATH = "AM.h5"
-NUM_EPOCHS=100
+NUM_EPOCHS=20
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -128,7 +128,7 @@ class DCGAN(object):
 
     def compile_discriminator(self, trainable=True):
         self.DM.trainable = trainable 
-        optimizer = SGD(lr=0.0001)
+        optimizer = Adam(lr=0.0001)
         self.DM.compile(loss='binary_crossentropy', optimizer=optimizer,\
             metrics=['accuracy'])
 
@@ -139,7 +139,8 @@ class DCGAN(object):
         #build discriminator and generator
         self.build_generator()
         self.DM = self.discriminator()
-        self.AM = Model(self.gen_input, self.DM([self.gen_input[0], self.gen_input[1], self.gen_output]))
+        generator_output = self.G.model(self.gen_input)
+        self.AM = Model(self.gen_input, self.DM([self.gen_input[0], self.gen_input[1], generator_output]))
         
         if file is not None:
             self.load_adversarial_weights(file)
@@ -219,7 +220,7 @@ class MNIST_DCGAN(object):
         self.DCGAN = DCGAN(self.img_rows, self.img_cols)
         self.adversarial = self.DCGAN.adversarial_model(file)
         self.discriminator = self.DCGAN.DM
-        self.generator = self.DCGAN.G
+        self.generator = self.DCGAN.G.model
 
     def plot_callback(self, model):
         """Called at the end of each epoch, displaying our previous test images,
@@ -230,6 +231,7 @@ class MNIST_DCGAN(object):
 
         # Get samples & Display them        
         pred_img = model.predict([masked, mask])
+        pred_img = np.where(mask == 1, masked, pred_img)
         # pred_img2 = model.predict([masked, mask])
         # plt.set_cmap('gray')
         # Show side by side
@@ -241,18 +243,19 @@ class MNIST_DCGAN(object):
             axes[3].imshow(pred_img[i,:,:,0] * 1.)
             plt.show()
                     
-            plt.savefig(r'img_{}.png'.format(i))
+            # plt.savefig(r'img_{}.png'.format(i))
             plt.close()
-    
+    def noisy_labels(self,labels):
+        noise = (np.random.random_sample(labels.shape) - 0.5) / 3
+        return np.absolute(labels + noise)
     # One epoch
-    # Totally ignore train steps, woopsie
     def train(self, train_steps=None, val_steps=25, save_interval=0):
         step_ctr = 0
         for images_train, images_true in self.train_generator:
             # print(images_train[0].shape)
             images_fake = self.generator.predict(images_train)
-            valid = np.ones((len(images_train[0]), 1))
-            fake = np.zeros((len(images_train[0]), 1))
+            valid = self.noisy_labels(np.ones((len(images_train[0]), 1)))
+            fake =  self.noisy_labels(np.zeros((len(images_train[0]), 1)))
             log_msg = None
             # ---------------------
             #  Train Discriminator
@@ -266,7 +269,7 @@ class MNIST_DCGAN(object):
             # ---------------------
 
             # Train the generator (wants discriminator to mistake images as real)
-            g_loss = self.adversarial.train_on_batch(images_train, valid)
+            g_loss = self.adversarial.train_on_batch(images_train, np.ones((len(images_train[0]), 1)))
             
             log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, g_loss[0], g_loss[1])
             print(log_mesg)
@@ -274,6 +277,41 @@ class MNIST_DCGAN(object):
             if train_steps is not None and step_ctr >= train_steps:
                 break
 
+        
+        if save_interval < 40 and (save_interval+5) % 10 == 0:
+             filepath = r"AM_Epoch{}.h5".format(NUM_EPOCHS-save_interval+55)
+             self.DCGAN.save_adversarial_weights(filepath)    
+        if save_interval == 0:
+             self.DCGAN.save_adversarial_weights("AM.h5")
+             self.plot_callback(self.generator)
+
+    def traingenerator(self, train_steps=None, val_steps=25, save_interval=0):
+        step_ctr = 0
+        for images_train, images_true in self.train_generator:
+            # print(images_train[0].shape)
+            valid = np.ones((len(images_train[0]), 1))
+            # ---------------------
+            #  Train Generator
+            # ---------------------
+
+            # Train the generator (wants discriminator to mistake images as real)
+            g_loss = self.adversarial.train_on_batch(images_train, valid)
+            
+            log_mesg = "[A loss: %f, acc: %f]" % (g_loss[0], g_loss[1])
+            print(log_mesg)
+            step_ctr += 1
+            if train_steps is not None and step_ctr >= train_steps:
+                break
+
+        
+        if save_interval < 40 and (save_interval+5) % 10 == 0:
+             filepath = r"AM_Epoch{}.h5".format(NUM_EPOCHS-save_interval+55)
+             self.DCGAN.save_adversarial_weights(filepath)    
+        if save_interval == 0:
+             self.DCGAN.save_adversarial_weights("AM.h5")
+             self.plot_callback(self.generator)
+
+    def validate(self):
         val_d_losses = np.array([])
         val_g_losses = np.array([])
         step_ctr = 0
@@ -284,29 +322,24 @@ class MNIST_DCGAN(object):
 
             d_loss_real = self.discriminator.test_on_batch([input_data[0], input_data[1], images_true], valid)
             d_loss_fake = self.discriminator.test_on_batch([input_data[0], input_data[1], images_fake], fake)
-            val_d_losses = np.append(val_d_losses, 0.5 * np.add(d_loss_real, d_loss_fake)[1])
+            val_d_losses = np.append(val_d_losses, 0.5 * np.add(d_loss_real, d_loss_fake)['acc'])
 
-            val_g_losses= np.append(val_g_losses, self.adversarial.test_on_batch(input_data, valid)[1])
+            val_g_losses= np.append(val_g_losses, self.adversarial.test_on_batch(input_data, valid)['acc'])
             step_ctr += 1
             if step_ctr >= val_steps:
                 break
         d_loss = np.average(val_d_losses)
         g_loss = np.average(val_g_losses)
-        print(f'Epoch {NUM_EPOCHS-save_interval}: val_d_acc: {d_loss}; val_g_acc: {g_loss}')
-        if (save_interval + 1) % 10 == 0:
-             filepath = r"AM_Epoch{}.h5".format(NUM_EPOCHS-save_interval)
-             self.DCGAN.save_adversarial_weights(filepath)    
-        if save_interval == 0:
-             self.DCGAN.save_adversarial_weights("AM.h5")
-             self.plot_callback(self.generator)
+        print(f'Epoch {NUM_EPOCHS-save_interval+55}: val_d_acc: {d_loss}; val_g_acc: {g_loss}')
 
 if __name__ == '__main__':
-    mnist_dcgan = MNIST_DCGAN()
-    # mnist_dcgan = MNIST_DCGAN(file=MODEL_FILEPATH)
     if len(sys.argv) == 1:
+        mnist_dcgan = MNIST_DCGAN(file='AM95.h5')
+        # mnist_dcgan = MNIST_DCGAN(file=MODEL_FILEPATH)
         for i in reversed(range(NUM_EPOCHS)):
-            mnist_dcgan.train(train_steps=100, save_interval=i)
+            mnist_dcgan.traingenerator(train_steps=100, save_interval=i)
     else:
+        mnist_dcgan = MNIST_DCGAN(file=sys.argv[1])
         mnist_dcgan.plot_callback(mnist_dcgan.generator)
         
     # timer.elapsed_time()
