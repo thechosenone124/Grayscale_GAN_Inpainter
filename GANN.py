@@ -29,7 +29,7 @@ VAL_DIR = "TrainingImages/512px/val"
 TEST_DIR = "TrainingImages/512px/test"
 BATCH_SIZE = 10
 MODEL_FILEPATH = "AM.h5"
-NUM_EPOCHS=20
+NUM_EPOCHS=100
 class AugmentingDataGenerator(ImageDataGenerator):
     #Keras' ImageDataGenerator's flow from directory generates batches of augmented images
     #We need masks and images together, so this wraps ImageDataGenerator
@@ -251,6 +251,7 @@ class MNIST_DCGAN(object):
     # One epoch
     def train(self, train_steps=None, val_steps=25, save_interval=0):
         step_ctr = 0
+        generator_losses = []
         for images_train, images_true in self.train_generator:
             # print(images_train[0].shape)
             images_fake = self.generator.predict(images_train)
@@ -272,21 +273,24 @@ class MNIST_DCGAN(object):
             g_loss = self.adversarial.train_on_batch(images_train, np.ones((len(images_train[0]), 1)))
             
             log_mesg = "%s  [A loss: %f, acc: %f]" % (log_mesg, g_loss[0], g_loss[1])
+            generator_losses = np.append(generator_losses, g_loss[0])
             print(log_mesg)
             step_ctr += 1
             if train_steps is not None and step_ctr >= train_steps:
                 break
 
         
-        if save_interval < 40 and (save_interval+5) % 10 == 0:
-             filepath = r"AM_Epoch{}.h5".format(NUM_EPOCHS-save_interval+55)
+        if save_interval < 20 and (save_interval+5) % 10 == 0:
+             filepath = r"AM_AdaptiveTraining{}.h5".format(NUM_EPOCHS-save_interval+95)
              self.DCGAN.save_adversarial_weights(filepath)    
         if save_interval == 0:
              self.DCGAN.save_adversarial_weights("AM.h5")
              self.plot_callback(self.generator)
+        return np.average(generator_losses)
 
     def traingenerator(self, train_steps=None, val_steps=25, save_interval=0):
         step_ctr = 0
+        generator_losses = []
         for images_train, images_true in self.train_generator:
             # print(images_train[0].shape)
             valid = np.ones((len(images_train[0]), 1))
@@ -298,18 +302,20 @@ class MNIST_DCGAN(object):
             g_loss = self.adversarial.train_on_batch(images_train, valid)
             
             log_mesg = "[A loss: %f, acc: %f]" % (g_loss[0], g_loss[1])
+            generator_losses = np.append(generator_losses, g_loss[0])
             print(log_mesg)
             step_ctr += 1
             if train_steps is not None and step_ctr >= train_steps:
                 break
 
-        
-        if save_interval < 40 and (save_interval+5) % 10 == 0:
-             filepath = r"AM_Epoch{}.h5".format(NUM_EPOCHS-save_interval+55)
+
+        if save_interval < 20 and (save_interval+5) % 10 == 0:
+             filepath = r"AM_AdaptiveTraining{}.h5".format(NUM_EPOCHS-save_interval+95)
              self.DCGAN.save_adversarial_weights(filepath)    
         if save_interval == 0:
              self.DCGAN.save_adversarial_weights("AM.h5")
              self.plot_callback(self.generator)
+        return np.average(generator_losses)
 
     def validate(self):
         val_d_losses = np.array([])
@@ -336,8 +342,13 @@ if __name__ == '__main__':
     if len(sys.argv) == 1:
         mnist_dcgan = MNIST_DCGAN(file='AM95.h5')
         # mnist_dcgan = MNIST_DCGAN(file=MODEL_FILEPATH)
+        g_loss = 0
         for i in reversed(range(NUM_EPOCHS)):
-            mnist_dcgan.traingenerator(train_steps=100, save_interval=i)
+            if g_loss > 2.0:
+                g_loss = mnist_dcgan.train(train_steps=100, save_interval=i)
+            else
+                g_loss = mnist_dcgan.traingenerator(train_steps=100, save_interval=i)
+            print(f'Epoch Gen Loss: {g_loss}')
     else:
         mnist_dcgan = MNIST_DCGAN(file=sys.argv[1])
         mnist_dcgan.plot_callback(mnist_dcgan.generator)
